@@ -26,16 +26,3 @@ tokens_filtrés = [mot for mot in tokens if mot not in stop_words]
 
 # Texte nettoyé
 texte_nettoye = " ".join(tokens_filtrés)
-
-
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-
-# Génération du nuage de mots
-wordcloud = WordCloud(width=800, height=400, background_color='white').generate(texte_nettoye)
-
-# Affichage
-plt.figure(figsize=(10, 5))
-plt.imshow(wordcloud, interpolation='bilinear')
-plt.axis('off')
-plt.show()
