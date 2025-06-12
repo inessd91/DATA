@@ -73,7 +73,41 @@ with tab1:
         - `df_clients` : uniquement les transactions avec identifiant client
     - Création de nouvelles variables : `TotalPrice`, `IsReturn`, `InvoiceHour`, etc.
     """)
+    with st.expander("🧠 Analyse détaillée"):
 
+        st.markdown("""
+        ### 🔍 Contexte du dataset  
+        Ce dataset provient d'une boutique en ligne britannique et couvre **une année complète** de transactions, de décembre 2010 à décembre 2011.  
+        Il comprend près de **500 000 enregistrements** et 8 colonnes principales relatives aux commandes : produits, quantités, prix, clients, dates, etc.
+
+        ### 📊 Qualité des données  
+        - Le dataset contient des valeurs manquantes importantes, notamment dans la colonne `CustomerID` (~25% manquants), limitant certaines analyses clients.  
+        - Des valeurs aberrantes comme `UnitPrice ≤ 0` ou `Quantity = 0` ont été éliminées pour garantir la fiabilité des analyses.  
+        - Les doublons exacts ont également été supprimés.
+
+        ### ⚙️ Préparation et structuration  
+        - Deux jeux de données ont été créés pour répondre aux différents besoins analytiques :  
+            - **`df_all`** : inclut toutes les transactions, y compris celles sans identifiant client, permettant une analyse globale des ventes.  
+            - **`df_clients`** : regroupe uniquement les transactions avec identifiant client, idéal pour étudier la fidélité et le comportement d’achat.  
+        - De nouvelles variables calculées ont été ajoutées, facilitant les analyses temporelles, financières et comportementales.
+
+        ### 🔮 Enjeux pour l’analyse  
+        - La distinction entre `df_all` et `df_clients` permet d’adapter les analyses selon la disponibilité des données clients.  
+        - Le nettoyage approfondi assure que les indicateurs (ventes, quantités) reflètent la réalité commerciale, sans biais liés aux erreurs ou anomalies.  
+        - La prise en compte des retours et annulations améliore la compréhension de la performance réelle des ventes.
+
+        ### 🚀 Prochaines étapes  
+        - Utiliser le dataset `df_clients` pour approfondir les analyses centrées sur la fidélisation, la segmentation client et les comportements d’achat.  
+        - Exploiter la granularité temporelle (date et heure des commandes) pour détecter les tendances saisonnières, hebdomadaires et horaires.  
+        - Combiner les analyses produits, clients et géographiques afin de formuler des recommandations stratégiques et opérationnelles.
+        """)
+
+
+
+
+
+    
+    
 # 2️⃣ Statistiques
 with tab2:
     st.header("📈 Indicateurs clés")
@@ -137,6 +171,58 @@ with tab2:
     st.pyplot(plt.gcf())
     plt.clf()
 
+    with st.expander("🧠 Analyse détaillée"):
+
+        st.markdown("""
+        ### 📈 Indicateurs de performance  
+        Cet onglet fournit une **vue d’ensemble des indicateurs clés** de performance commerciale :
+
+        - 💰 **Ventes totales** : Chiffre d’affaires brut sur la période sélectionnée  
+        - 🧾 **Nombre de commandes** : Nombre de factures uniques (`InvoiceNo`)  
+        - 📦 **Articles vendus** : Quantité totale commandée (`Quantity`)  
+        - 🌍 **Nombre de pays** : Diversité géographique des clients (`Country`)  
+
+        ---
+
+        ### 🔁 KPIs de fidélisation client *(dans `df_clients` uniquement)*  
+        Ces indicateurs permettent d’évaluer la **relation client** :
+
+        - **Taux de retour client** : Part de clients ayant passé plusieurs commandes  
+        - **Nombre moyen de commandes par client** : Fréquence d’achat  
+        - **Valeur vie client moyenne** : Dépenses moyennes par client (Customer Lifetime Value)
+
+        Ces données sont essentielles pour identifier les clients fidèles et estimer la rentabilité à long terme.
+
+        ---
+
+        ### 📅 Tendance des ventes mensuelles  
+        Une **régression linéaire** est appliquée aux ventes agrégées par mois (`YearMonth`) pour :
+
+        - Visualiser les tendances de croissance ou de baisse  
+        - Identifier les périodes fortes ou faibles  
+        - Appuyer des décisions stratégiques (offres saisonnières, prévisions)
+
+        ---
+
+        ### 📊 Statistiques descriptives  
+        Deux variables sont explorées :
+
+        - `TotalPrice` : pour analyser la distribution des montants par ligne de commande  
+        - `Quantity` : pour détecter les achats en gros, promotions ou anomalies
+
+        ---
+
+        ### 🕒 Répartition horaire des commandes  
+        Analyse des heures de passage des commandes :
+
+        - Pour cibler les heures de forte activité  
+        - Planifier le support client et les promotions  
+        - Ajuster la charge logistique et le service
+        """)
+
+    
+
+
 # 3️⃣ Produits & Clients
 with tab3:
     st.header("📦 Top 10 Produits")
@@ -157,6 +243,39 @@ with tab3:
         fig2 = px.bar(top_clients, x='CustomerID', y='TotalPrice', title="Top Clients")
         st.plotly_chart(fig2)
         st.download_button("📥 Télécharger Top Clients", top_clients.to_csv(index=False), "top_clients.csv")
+    with st.expander("🧠 Analyse détaillée"):
+
+        st.markdown("""
+        ### 📦 Top 10 Produits (par Quantité)  
+        On identifie les **produits les plus populaires** :
+
+        - Agrégation par `StockCode` et `Description`  
+        - Classement selon le volume (`Quantity`)  
+        - Affiche les best-sellers utiles pour :
+
+            - Optimiser le stock  
+            - Mener des campagnes ciblées  
+            - Surveiller les performances produit
+
+        ---
+
+        ### 👥 Top 10 Clients (par dépenses)  
+        (Seulement pour `df_clients`)  
+        Cet indicateur classe les clients par chiffre d’affaires généré (`TotalPrice`) :
+
+        - Identifier les **clients VIP** à fidéliser  
+        - Détecter les clients les plus stratégiques  
+        - Prioriser les actions marketing personnalisées
+
+        ---
+
+        ### 📥 Export  
+        Les résultats sont téléchargeables pour permettre :
+
+        - Des analyses externes dans Excel  
+        - La génération de rapports  
+        - L’exploitation par les équipes commerciales
+        """)
 
 # 4️⃣ Carte & Recommandations
 with tab4:
@@ -174,6 +293,31 @@ with tab4:
     - 💡 Fidéliser les meilleurs clients avec des offres ciblées
     - 🌍 Cibler les pays à fort potentiel de croissance
     """)
+
+    with st.expander("🧠 Analyse détaillée"):
+
+        st.markdown("""
+        ### 🌍 Carte géographique des ventes  
+        La carte affiche la répartition des ventes par pays (`Country`) :
+
+        - Pour repérer les **zones de forte activité**  
+        - Visualiser les **marchés à potentiel**  
+        - Cibler géographiquement les campagnes  
+
+        L’utilisation d’une carte choroplèthe (gradient de couleur) permet de comparer facilement les volumes par pays.
+
+        ---
+
+        ### ✅ Recommandations stratégiques  
+        Ces recommandations sont issues des observations précédentes :
+
+        - 🕒 **Optimiser les campagnes** marketing selon les heures de commande  
+        - 🔁 **Analyser les produits à fort taux de retour** pour améliorer la qualité  
+        - 💡 **Mettre en place des programmes VIP** pour les clients fidèles  
+        - 🌐 **Explorer les pays sous-représentés** pour déploiement international
+
+        Ces suggestions aident à transformer les insights en actions concrètes.
+        """)
 
 # 📤 Export global
 st.sidebar.subheader("📥 Exporter données filtrées")
