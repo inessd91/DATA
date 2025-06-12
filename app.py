@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import numpy as np
 # 📥 Chargement des fichiers
 df_all = pd.read_csv("df_all.csv", parse_dates=['InvoiceDate'])
 df_clients = pd.read_csv("df_clients.csv", parse_dates=['InvoiceDate'])
@@ -45,25 +45,39 @@ tab1, tab2, tab3, tab4 = st.tabs(["📄 Présentation", "📊 Statistiques", "�
 
 # 1️⃣ Présentation des données
 with tab1:
+    
     st.header("📄 Présentation du jeu de données")
+    st.markdown("### 1. Présentation générale")
     st.markdown("""
     **Source** : [Kaggle - Online Retail Dataset](https://www.kaggle.com/datasets/carrie1/ecommerce-data)  
     **Période couverte** : Décembre 2010 à décembre 2011  
     **Lieu** : Boutique en ligne basée au Royaume-Uni
     """)
-    
-    st.subheader("📦 Dimensions du dataset original")
-    st.write(f"Nombre de lignes : {df_original.shape[0]}")
-    st.write(f"Nombre de colonnes : {df_original.shape[1]}")
-    st.dataframe(df_original.head())
+    #
+    with st.expander("📦 Dimensions du dataset original"):
+        col1, col2 = st.columns(2)
+        col1.metric("Nombre de lignes", f"{df_original.shape[0]:,}")
+        col2.metric("Nombre de colonnes", f"{df_original.shape[1]}")
 
-    st.subheader("📊 Types de variables")
-    st.write(pd.DataFrame(df_original.dtypes, columns=["Type de donnée"]))
+    with st.expander("📊 Types de variables"):
+        st.dataframe(pd.DataFrame(df_original.dtypes, columns=["Type de donnée"]))
 
-    st.subheader("🧼 Données manquantes")
-    st.write(df_original.isnull().sum().to_frame("Valeurs manquantes"))
+    with st.expander("🧼 Données manquantes"):
+        st.dataframe(df_original.isnull().sum().to_frame("Valeurs manquantes"))
 
-    st.subheader("✅ Nettoyage appliqué")
+    #st.subheader("📦 Dimensions du dataset original")
+    #st.write(f"Nombre de lignes : {df_original.shape[0]}")
+    #st.write(f"Nombre de colonnes : {df_original.shape[1]}")
+    #st.dataframe(df_original.head())
+
+    #st.subheader("📊 Types de variables")
+    #st.write(pd.DataFrame(df_original.dtypes, columns=["Type de donnée"]))
+
+    #st.subheader("🧼 Données manquantes")
+    #st.write(df_original.isnull().sum().to_frame("Valeurs manquantes"))
+
+    #st.subheader("✅ Nettoyage appliqué")
+    st.markdown("### 2. Nettoyage appliqué")
     st.markdown("""
     - Suppression des lignes avec `UnitPrice <= 0` ou `Quantity = 0`
     - Suppression des doublons exacts
@@ -74,6 +88,46 @@ with tab1:
     - Création de nouvelles variables : `TotalPrice`, `IsReturn`, `InvoiceHour`, etc.
     """)
 
+    #st.subheader("📁 Datasets générés après nettoyage")
+    st.markdown("### 3. Datasets générés après nettoyage")
+
+    with st.expander("Transactions globales – Dataset `df_all`"):
+        st.write(f"**Nombre de lignes** : {df_all.shape[0]}")
+        st.write(f"**Nombre de colonnes** : {df_all.shape[1]}")
+        st.markdown("""
+        - Inclut **toutes** les transactions, y compris les clients sans identifiant.
+        - Utilisé pour les analyses **globales** (ventes, produits, pays, etc.)
+        - Colonnes ajoutées :
+            - `TotalPrice` : Montant total par ligne (Quantity × UnitPrice)
+            - `IsReturn` : True si la facture commence par "C" (retour)
+            - `IsCancelled` : True si quantité ou prix est négatif
+            - `YearMonth`, `InvoiceHour` : Dates transformées
+        """)
+        if st.button("📦 Aperçu df_all"):
+            st.dataframe(df_all.head())
+
+    with st.expander("Transactions clients identifiés – Dataset `df_clients`"):
+        st.write(f"**Nombre de lignes** : {df_clients.shape[0]}")
+        st.write(f"**Nombre de colonnes** : {df_clients.shape[1]}")
+        st.markdown("""
+        - Sous-ensemble de `df_all` filtré sur les lignes avec `CustomerID` non nul.
+        - Utile pour les analyses **clients**, segmentation, fidélité, etc.
+        - Même structure que `df_all`, avec uniquement les clients identifiés.
+        """)
+        if st.button("👥 Aperçu df_clients"):
+            st.dataframe(df_clients.head())
+    
+    #st.subheader("🌀 Nuage de mots : Contexte de l'e-commerce")
+    st.markdown("### 4. Nuage de mots : Contexte de l'e-commerce")
+
+    st.markdown("""
+    > Ce nuage de mots est basé sur un texte décrivant les enjeux de l’e-commerce :  
+    > comportement client, rapidité de service, stratégies de vente...
+    """)
+
+    st.image("wordcloud_ecommerce.png", use_container_width=True)
+
+
 # 2️⃣ Statistiques
 with tab2:
     st.header("📈 Indicateurs clés")
@@ -82,6 +136,46 @@ with tab2:
     col2.metric("🧾 Commandes", df['InvoiceNo'].nunique())
     col3.metric("📦 Articles vendus", int(df['Quantity'].sum()))
     col4.metric("🌍 Pays couverts", df['Country'].nunique())
+    # --- KPIs Fidélisation ---
+    if dataset_choice == "df_clients" and 'CustomerID' in df.columns:
+        commandes_par_client = df.groupby('CustomerID')['InvoiceNo'].nunique()
+        clients_fideles = commandes_par_client[commandes_par_client > 1].count()
+        total_clients = commandes_par_client.count()
+        taux_retour_client = (clients_fideles / total_clients) * 100 if total_clients > 0 else 0
+        nombre_moyen_commandes = commandes_par_client.mean() if total_clients > 0 else 0
+        valeur_vie_client = df.groupby('CustomerID')['TotalPrice'].sum().mean() if total_clients > 0 else 0
+
+        st.subheader("🔁 KPIs Fidélisation")
+        st.write(f"Taux de retour client : {taux_retour_client:.2f} %")
+        st.write(f"Nombre moyen de commandes par client : {nombre_moyen_commandes:.2f}")
+        st.write(f"Valeur vie client moyenne : {valeur_vie_client:.2f} £")
+
+
+    # Statistiques descriptives sur TotalPrice et Quantity
+    mean_ventes = df['TotalPrice'].mean()
+    median_ventes = df['TotalPrice'].median()
+    std_ventes = df['TotalPrice'].std()
+
+    mean_quantite = df['Quantity'].mean()
+    median_quantite = df['Quantity'].median()
+    std_quantite = df['Quantity'].std()
+    st.subheader("📅 Tendance linéaire des ventes mensuelles")
+    monthly_sales = df.groupby('YearMonth')['TotalPrice'].sum().reset_index()
+    monthly_sales['YearMonth_num'] = np.arange(len(monthly_sales))  # variable numérique pour la régression
+
+    plt.figure(figsize=(10,5))
+    sns.regplot(x='YearMonth_num', y='TotalPrice', data=monthly_sales, marker='o', color='blue')
+    plt.xticks(ticks=monthly_sales['YearMonth_num'], labels=monthly_sales['YearMonth'], rotation=45)
+    plt.title("Tendance linéaire des ventes mensuelles")
+    plt.xlabel("Mois")
+    plt.ylabel("Ventes totales (£)")
+    plt.tight_layout()
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+    st.subheader("📊 Statistiques descriptives")
+    st.write(f"Ventes (TotalPrice) : moyenne = {mean_ventes:.2f} £, médiane = {median_ventes:.2f} £, écart-type = {std_ventes:.2f}")
+    st.write(f"Quantités vendues : moyenne = {mean_quantite:.2f}, médiane = {median_quantite:.2f}, écart-type = {std_quantite:.2f}")
 
     st.subheader("📅 Ventes mensuelles")
     monthly_sales = df.groupby('YearMonth')['TotalPrice'].sum().reset_index()
