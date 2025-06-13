@@ -9,10 +9,6 @@ df_all = pd.read_csv("df_all.csv", parse_dates=['InvoiceDate'])
 df_clients = pd.read_csv("df_clients.csv", parse_dates=['InvoiceDate'])
 df_original = pd.read_csv("data.csv", encoding='ISO-8859-1')
 
-# Ajout de colonnes
-for df in [df_all, df_clients]:
-    df['YearMonth'] = df['InvoiceDate'].dt.to_period('M').astype(str)
-    df['InvoiceHour'] = df['InvoiceDate'].dt.hour
 
 # Interface
 st.title("🛍️ Dashboard E-commerce : Analyse des ventes")
