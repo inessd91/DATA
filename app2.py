@@ -1,308 +1,314 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import matplotlib.pyplot as plt
-import plotly.express as px 
+import seaborn as sns
+import numpy as np
+# 📥 Chargement des fichiers
+df_all = pd.read_csv("df_all.csv", parse_dates=['InvoiceDate'])
+df_clients = pd.read_csv("df_clients.csv", parse_dates=['InvoiceDate'])
+df_original = pd.read_csv("data.csv", encoding='ISO-8859-1')
 
-# Config page
-st.set_page_config(page_title="Analyse E-commerce", layout="wide")
 
-# Chargement des datasets (avec cache)
-@st.cache_data
-def load_original():
-    df = pd.read_csv("data.csv", encoding="ISO-8859-1")
-    df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
-    return df
+# Interface
+st.title("🛍️ Dashboard E-commerce : Analyse des ventes")
 
-@st.cache_data
-def load_df_all():
-    df_all = pd.read_csv("df_all.csv")
-    df_all['InvoiceDate'] = pd.to_datetime(df_all['InvoiceDate'])
-    return df_all
+# Sélection du dataset
+dataset_choice = st.sidebar.radio("Sélectionner un dataset :", ["df_all", "df_clients"])
+df = df_all if dataset_choice == "df_all" else df_clients
 
-@st.cache_data
-def load_df_clients():
-    df_clients = pd.read_csv("df_clients.csv")
+# Filtres utilisateurs
+min_date, max_date = df['InvoiceDate'].min(), df['InvoiceDate'].max()
+selected_dates = st.sidebar.date_input("Période", [min_date, max_date])
+pays = sorted(df['Country'].dropna().unique())
+selected_country = st.sidebar.selectbox("Pays", ["Tous"] + pays)
+if selected_country != "Tous":
+    df = df[df['Country'] == selected_country]
+if dataset_choice == "df_clients":
+    clients = sorted(df['CustomerID'].dropna().astype(int).unique())
+    selected_client = st.sidebar.selectbox("Client", ["Tous"] + list(clients))
+    if selected_client != "Tous":
+        df = df[df['CustomerID'] == int(selected_client)]
+df = df[(df['InvoiceDate'] >= pd.to_datetime(selected_dates[0])) & (df['InvoiceDate'] <= pd.to_datetime(selected_dates[1]))]
+if dataset_choice == "df_all":
+    if not st.sidebar.checkbox("Inclure les retours", value=True):
+        df = df[df['IsReturn'] == False]
+    if not st.sidebar.checkbox("Inclure les annulations", value=True):
+        df = df[df['IsCancelled'] == False]
 
-    return df_clients
+# 🧭 Onglets principaux
+tab1, tab2, tab3, tab4 = st.tabs(["📄 Présentation", "📊 Statistiques", "🏆 Produits & Clients", "📍 Carte & Recos"])
 
-# Chargement effectif
-df_original = load_original()
-df_all = load_df_all()
-df_clients = load_df_clients()
+# 1️⃣ Présentation des données
+with tab1:
+    st.header("📄 Présentation du jeu de données")
 
-# Navigation via sidebar
-st.sidebar.title("🧭 Navigation")
-page = st.sidebar.radio("Choisissez une section :", ["Présentation", "Statistiques", "Visualisations"])
-
-# ========================
-# Page Présentation
-# ========================
-if page == "Présentation":
-    st.title("🛍️ Présentation du jeu de données et du nettoyage")
-
-    st.markdown("""
-    ### 🗂️ 1. Source du jeu de données
-
-    Ce jeu de données provient de [Kaggle](https://www.kaggle.com/datasets/carrie1/ecommerce-data).  
-    Il contient les transactions d'un site e-commerce basé au Royaume-Uni entre **décembre 2010 et décembre 2011**.
+    st.info("""
+    Ce jeu de données couvre une année complète d’activité d’un e-commerce britannique (décembre 2010 à décembre 2011).  
+    Il permet une analyse fine des transactions, des clients et des produits, avec près de 500 000 lignes.  
+    Deux jeux de données sont utilisés :
+    - `df_all` : toutes les transactions (clients connus ou anonymes)
+    - `df_clients` : uniquement celles avec identifiant client
     """)
 
-    st.markdown("### 📦 2. Dataset original (`data.csv`)")
-    st.write(f"- Nombre d'observations : {df_original.shape[0]}")
-    st.write(f"- Nombre de variables : {df_original.shape[1]}")
-    st.dataframe(df_original.head())
-
+    st.markdown("### 1. Présentation générale")
     st.markdown("""
-    ### 🧹 3. Nettoyage réalisé
-
-    Afin de préparer les données pour l’analyse, plusieurs étapes de nettoyage ont été réalisées dans le notebook :
-
-    - 🔸 **Suppression des lignes avec des valeurs incohérentes**, telles que :
-        - Quantité négative (`Quantity < 0`) non liée à une facture de retour
-        - Prix unitaire nul ou négatif (`UnitPrice <= 0`)
-    - 🔸 **Suppression des doublons** exacts dans les transactions
-    - 🔸 **Conversion des types de données** :
-        - `InvoiceDate` en format datetime
-        - autres colonnes au format approprié
-    - 🔸 **Gestion des lignes sans identifiant client (`CustomerID`)** :
-        - Ces lignes sont conservées dans `df_all` pour les analyses globales de ventes
-        - Elles sont exclues de `df_clients` afin de permettre des analyses par client (ex. : RFM, fidélité)
-
-    Deux jeux de données sont ainsi générés :
-        - **`df_all`** : contient toutes les transactions valides (avec ou sans identifiant client)
-        - **`df_clients`** : contient uniquement les lignes avec un identifiant client valide
-    """)
-    
-    #Creation des variables 
-    st.markdown("""
-    ### 🧪 4. Création de nouvelles variables pertinentes
-
-    Des variables supplémentaires ont été créées à partir des données brutes, afin de faciliter les analyses statistiques, comportementales et commerciales.
-
-    - **`TotalPrice`** : Montant total d’une ligne (`Quantity × UnitPrice`)
-    - **`IsReturn`** : Indique si la ligne correspond à un retour produit (`Quantity < 0`)
-    - **`IsCancelled`** : Facture annulée (numéro de facture commençant par "C")
-    - **`InvoiceHour`** : Heure de la commande (extraite de `InvoiceDate`)
-    - **`InvoiceTotalItems`** : Nombre total d’articles dans une facture
-    - **`CustomerTotalSpent`** : Montant total dépensé par un client
-    - **`CustomerNumOrders`** : Nombre total de commandes passées par client
-
-    Ces variables permettent :
-    - De mieux comprendre les comportements d’achat
-    - De mesurer la performance commerciale
-    - D’identifier les clients à fort potentiel ou à risque
-    - De détecter les anomalies (commandes annulées, pics horaires, retours fréquents)
-
+    **Source** : [Kaggle - Online Retail Dataset](https://www.kaggle.com/datasets/carrie1/ecommerce-data)  
+    **Période couverte** : Décembre 2010 à décembre 2011  
+    **Lieu** : Boutique en ligne basée au Royaume-Uni
     """)
 
+    with st.expander("📦 Dimensions du dataset original"):
+        col1, col2 = st.columns(2)
+        col1.metric("Nombre de lignes", f"{df_original.shape[0]:,}")
+        col2.metric("Nombre de colonnes", f"{df_original.shape[1]}")
 
-    # Section df_all
-    st.markdown("### 📊 5. Dataset `df_all` (transactions nettoyées)")
-    st.write(f"- Nombre d'observations : {df_all.shape[0]}")
-    st.write(f"- Nombre de variables : {df_all.shape[1]}")
-    st.write("#### Valeurs manquantes dans `df_all`")
-    missing_all = df_all.isnull().sum()
-    if missing_all.sum() == 0:
-        st.success("✅ Aucune valeur manquante.")
-    else:
-        st.write(missing_all[missing_all > 0])
-    st.dataframe(df_all.head())
+    with st.expander("📊 Types de variables"):
+        st.dataframe(pd.DataFrame(df_original.dtypes, columns=["Type de donnée"]))
 
-    # Section df_clients
-    st.markdown("### 👥 6. Dataset `df_clients` (transactions avec client identifié)")
-    st.write(f"- Nombre d'observations : {df_clients.shape[0]}")
-    st.write(f"- Nombre de variables : {df_clients.shape[1]}")
-    st.write("#### Valeurs manquantes dans `df_clients`")
-    missing_clients = df_clients.isnull().sum()
-    if missing_clients.sum() == 0:
-        st.success("✅ Aucune valeur manquante.")
-    else:
-        st.write(missing_clients[missing_clients > 0])
-    st.dataframe(df_clients.head())
+    with st.expander("🧼 Données manquantes"):
+        st.dataframe(df_original.isnull().sum().to_frame("Valeurs manquantes"))
 
+    st.markdown("### 2. Nettoyage appliqué")
+    st.markdown("""
+    - Suppression des lignes avec `UnitPrice <= 0` ou `Quantity = 0`
+    - Suppression des doublons exacts
+    - Formatage de `InvoiceDate` en datetime
+    - Séparation :
+        - `df_all` : toutes les transactions (clients connus ou anonymes)
+        - `df_clients` : uniquement les transactions avec identifiant client
+    - Création de nouvelles variables : `TotalPrice`, `IsReturn`, `InvoiceHour`, etc.
+    """)
 
-###------------------------
-# page stat
-###------------------------
-if page == "Statistiques":
-    st.title("📊 Statistiques descriptives")
+    st.markdown("### 3. Datasets générés après nettoyage")
 
-    # --- FILTRES ---
-    st.sidebar.header("Filtres")
+    with st.expander("Transactions globales – Dataset `df_all`"):
+        st.write(f"**Nombre de lignes** : {df_all.shape[0]}")
+        st.write(f"**Nombre de colonnes** : {df_all.shape[1]}")
+        st.markdown("""
+        - Inclut **toutes** les transactions, y compris les clients sans identifiant.
+        - Utilisé pour les analyses **globales** (ventes, produits, pays, etc.)
+        - Colonnes ajoutées :
+            - `TotalPrice` : Montant total par ligne (Quantity × UnitPrice)
+            - `IsReturn` : True si la facture commence par "C" (retour)
+            - `IsCancelled` : True si quantité ou prix est négatif
+            - `YearMonth`, `InvoiceHour` : Dates transformées
+        """)
+        if st.button("📦 Aperçu df_all"):
+            st.dataframe(df_all.head())
 
-    # Plages de dates (sur df_all)
-    date_min = df_all['InvoiceDate'].min()
-    date_max = df_all['InvoiceDate'].max()
+    with st.expander("Transactions clients identifiés – Dataset `df_clients`"):
+        st.write(f"**Nombre de lignes** : {df_clients.shape[0]}")
+        st.write(f"**Nombre de colonnes** : {df_clients.shape[1]}")
+        st.markdown("""
+        - Sous-ensemble de `df_all` filtré sur les lignes avec `CustomerID` non nul.
+        - Utile pour les analyses **clients**, segmentation, fidélité, etc.
+        - Même structure que `df_all`, avec uniquement les clients identifiés.
+        """)
+        if st.button("👥 Aperçu df_clients"):
+            st.dataframe(df_clients.head())
 
-    date_range = st.sidebar.date_input(
-        "Période d'analyse",
-        [date_min, date_max],
-        min_value=date_min,
-        max_value=date_max
+    st.markdown("### 4. Nuage de mots : Contexte de l'e-commerce")
+    st.markdown("""
+    > Ce nuage de mots est basé sur un texte décrivant les enjeux de l’e-commerce :  
+    > comportement client, rapidité de service, stratégies de vente...
+    """)
+    st.image("wordcloud_ecommerce.png", use_container_width=True)
+
+    st.markdown("### 5. Synthèse analytique")
+    st.success("""
+    - Le dataset contient près de **500 000 transactions**, dont **25 % sans identifiant client**.
+    - Le nettoyage a supprimé les anomalies (`UnitPrice <= 0`, `Quantity = 0`, doublons).
+    - Deux datasets ont été construits pour répondre à différents objectifs analytiques.
+    - Des colonnes dérivées (`TotalPrice`, `InvoiceHour`, etc.) facilitent l’analyse temporelle et comportementale.
+    - Ce travail préparatoire est essentiel pour assurer la **qualité des insights** commerciaux à venir.
+    """)
+
+# 2️⃣ Statistiques
+with tab2:
+    st.header("📈 Indicateurs clés")
+
+    # 🔢 Métriques principales
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("💰 Ventes totales", f"{df['TotalPrice'].sum():,.0f} £")
+    col2.metric("🧾 Commandes", df['InvoiceNo'].nunique())
+    col3.metric("📦 Articles vendus", int(df['Quantity'].sum()))
+    col4.metric("🌍 Pays couverts", df['Country'].nunique())
+
+    st.info("Les indicateurs ci-dessus offrent un aperçu rapide de la performance globale de l'activité commerciale sur la période sélectionnée.")
+
+    # 🔁 KPIs Fidélisation (si df_clients)
+    if dataset_choice == "df_clients" and 'CustomerID' in df.columns:
+        commandes_par_client = df.groupby('CustomerID')['InvoiceNo'].nunique()
+        clients_fideles = commandes_par_client[commandes_par_client > 1].count()
+        total_clients = commandes_par_client.count()
+        taux_retour_client = (clients_fideles / total_clients) * 100 if total_clients > 0 else 0
+        nombre_moyen_commandes = commandes_par_client.mean() if total_clients > 0 else 0
+        valeur_vie_client = df.groupby('CustomerID')['TotalPrice'].sum().mean() if total_clients > 0 else 0
+
+        st.subheader("🔁 KPIs de fidélisation client")
+        st.write(f"**Taux de retour client** : {taux_retour_client:.2f} %")
+        st.write(f"**Nombre moyen de commandes par client** : {nombre_moyen_commandes:.2f}")
+        st.write(f"**Valeur vie client moyenne** : {valeur_vie_client:.2f} £")
+
+        st.success("💡 Ces indicateurs montrent un bon potentiel de fidélisation avec une valeur vie client prometteuse.")
+
+    # 📉 Tendance des ventes
+    st.subheader("📅 Tendance linéaire des ventes mensuelles")
+    monthly_sales = df.groupby('YearMonth')['TotalPrice'].sum().reset_index()
+    monthly_sales['YearMonth_num'] = np.arange(len(monthly_sales))  # Pour régression
+
+    plt.figure(figsize=(10, 5))
+    sns.regplot(x='YearMonth_num', y='TotalPrice', data=monthly_sales, marker='o', color='blue')
+    plt.xticks(ticks=monthly_sales['YearMonth_num'], labels=monthly_sales['YearMonth'], rotation=45)
+    plt.title("Tendance linéaire des ventes mensuelles")
+    plt.xlabel("Mois")
+    plt.ylabel("Ventes totales (£)")
+    plt.tight_layout()
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+    st.markdown("👉 **La tendance générale est haussière avec un pic net en novembre-décembre.**")
+
+    # 📊 Statistiques descriptives
+    st.subheader("📊 Statistiques descriptives")
+    mean_ventes = df['TotalPrice'].mean()
+    median_ventes = df['TotalPrice'].median()
+    std_ventes = df['TotalPrice'].std()
+
+    mean_quantite = df['Quantity'].mean()
+    median_quantite = df['Quantity'].median()
+    std_quantite = df['Quantity'].std()
+
+    st.write(f"**Ventes (TotalPrice)** : moyenne = {mean_ventes:.2f} £, médiane = {median_ventes:.2f} £, écart-type = {std_ventes:.2f}")
+    st.write(f"**Quantités vendues** : moyenne = {mean_quantite:.2f}, médiane = {median_quantite:.2f}, écart-type = {std_quantite:.2f}")
+
+    st.info("Les ventes présentent une forte variabilité, ce qui peut indiquer des promotions ou des achats groupés occasionnels.")
+
+    # 📅 Ventes mensuelles
+    st.subheader("📅 Ventes par mois")
+    monthly_sales = df.groupby('YearMonth')['TotalPrice'].sum().reset_index()
+    fig_month = px.line(monthly_sales, x='YearMonth', y='TotalPrice', title="Évolution des ventes mensuelles")
+    st.plotly_chart(fig_month)
+
+    st.markdown("👉 **Les pics saisonniers sont visibles : les mois d’hiver concentrent une grosse part des ventes.**")
+
+    # 🕒 Heures de commande
+    st.subheader("🕒 Heures de commandes")
+    plt.figure(figsize=(10, 4))
+    sns.histplot(df['InvoiceHour'], bins=24, kde=False, color='darkorange')
+    plt.title("Répartition horaire des commandes")
+    plt.xlabel("Heure")
+    plt.ylabel("Nombre de commandes")
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+    st.markdown("👉 **La majorité des commandes sont passées entre 9h et 14h.** Idéal pour programmer des campagnes promotionnelles ciblées.")
+
+# 3️⃣ Produits & Clients
+with tab3:
+    st.header("📦 Analyse Produits & Clients")
+
+    # 🎯 Top produits
+    st.subheader("🏆 Top 10 Produits (par quantité vendue)")
+    top_products = (
+        df.groupby(['StockCode', 'Description'])
+        .agg({'Quantity': 'sum', 'TotalPrice': 'sum'})
+        .reset_index()
+        .sort_values('Quantity', ascending=False)
+        .head(10)
     )
 
-    # Filtre pays
-    countries = ["Tous les pays"] + sorted(df_all['Country'].dropna().unique().tolist())
-    selected_country = st.sidebar.selectbox("Pays", countries)
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
+    sns.barplot(data=top_products, y='Description', x='Quantity', palette="Blues_d", ax=ax1)
+    ax1.set_title("Top Produits (Quantité)")
+    st.pyplot(fig1)
 
-    # --- FILTRAGE DES DONNÉES ---
+    st.markdown("📥 [Télécharger les données](top_produits.csv)")
+    st.download_button("⬇️ Exporter Top Produits", top_products.to_csv(index=False), "top_produits.csv")
 
-    # Filtrer df_all
-    df_all_filtered = df_all.copy()
-    if len(date_range) == 2:
-        start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-        df_all_filtered = df_all_filtered[(df_all_filtered['InvoiceDate'] >= start_date) & (df_all_filtered['InvoiceDate'] <= end_date)]
+    st.success("Ces produits sont les plus populaires. À privilégier pour les promotions ou bundles.")
 
-    if selected_country != "Tous les pays":
-        df_all_filtered = df_all_filtered[df_all_filtered['Country'] == selected_country]
+    # 👥 Top clients (si df_clients)
+    if dataset_choice == "df_clients":
+        st.subheader("👥 Top 10 Clients (par chiffre d'affaires)")
+        top_clients = (
+            df.groupby('CustomerID')['TotalPrice']
+            .sum()
+            .reset_index()
+            .sort_values('TotalPrice', ascending=False)
+            .head(10)
+        )
 
-    # Filtrer df_clients (pas de date ici, car pas de InvoiceDate dans df_clients)
-    df_clients_filtered = df_clients.copy()
-    if selected_country != "Tous les pays":
-        df_clients_filtered = df_clients_filtered[df_clients_filtered['Country'] == selected_country]
+        fig2 = px.bar(top_clients, x='CustomerID', y='TotalPrice', title="Top Clients")
+        st.plotly_chart(fig2)
 
-    # Calcul moyenne panier pour clients filtrés
-    df_clients_filtered = df_clients_filtered[df_clients_filtered['CustomerNumOrders'] > 0].copy()
-    df_clients_filtered['CustomerAvgBasket'] = df_clients_filtered['CustomerTotalSpent'] / df_clients_filtered['CustomerNumOrders']
+        st.download_button("⬇️ Exporter Top Clients", top_clients.to_csv(index=False), "top_clients.csv")
 
-    # --- AFFICHAGE DES STATISTIQUES ---
+        st.info("Ces clients VIP génèrent un fort chiffre d’affaires. Ils sont clés pour la fidélisation et les campagnes ciblées.")
 
-    st.markdown("### 1. Statistiques générales")
+    # 📌 Synthèse analytique
+    st.subheader("🧠 Analyse synthétique")
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Nombre de lignes", f"{df_all_filtered.shape[0]:,}")
-    col2.metric("Nombre de factures", f"{df_all_filtered['InvoiceNo'].nunique()}")
-    col3.metric("Nombre de produits", f"{df_all_filtered['Description'].nunique()}")
-    col4.metric("Chiffre d'affaires total", f"{df_all_filtered['TotalPrice'].sum():,.2f} £")
+    st.markdown("""
+    ### Produits
+    - Le **Top 10 Produits** représente souvent une part significative des volumes.
+    - À surveiller : ruptures de stock, saisonnalité, taux de retour.
 
-    st.markdown("#### Évolution du chiffre d'affaires par jour")
-    df_all_filtered['InvoiceDateOnly'] = df_all_filtered['InvoiceDate'].dt.date
-    ca_journalier = df_all_filtered.groupby('InvoiceDateOnly')['TotalPrice'].sum().reset_index()
+    ### Clients (si disponibles)
+    - Le **Top 10 Clients** reflète une forte concentration de chiffre d'affaires sur une minorité.
+    - À valoriser via des programmes de fidélité, offres personnalisées ou relances.
 
-    fig = px.line(ca_journalier, x='InvoiceDateOnly', y='TotalPrice',
-                  title="Chiffre d'affaires quotidien", markers=True)
-    st.plotly_chart(fig, use_container_width=True)
+    ### Recommandations
+    - 🛒 Créer des offres groupées avec les best-sellers
+    - 🔍 Analyser les produits les moins vendus pour détection d’obsolescence
+    - 🎁 Personnaliser les offres pour les top clients
+    """)
 
-    st.markdown("#### Statistiques descriptives des variables numériques")
-    st.dataframe(df_all_filtered.describe())
+# 4️⃣ Carte & Recommandations
+with tab4:
+    st.header("🌍 Analyse géographique & recommandations")
 
-    st.markdown("---")
+    # 🌐 Carte des ventes par pays
+    st.subheader("🗺️ Répartition des ventes par pays")
 
-    st.markdown("### 2. Statistiques clients")
+    country_sales = df.groupby('Country')['TotalPrice'].sum().reset_index()
 
-    st.write(f"Nombre de clients : {df_clients_filtered['CustomerID'].nunique()}")
+    fig_map = px.choropleth(
+        country_sales,
+        locations="Country",
+        locationmode="country names",
+        color="TotalPrice",
+        title="Ventes par pays",
+        color_continuous_scale="Viridis"
+    )
+    st.plotly_chart(fig_map)
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Dépense moyenne par client", f"{df_clients_filtered['CustomerTotalSpent'].mean():.2f} £")
-    col2.metric("Panier moyen par commande", f"{df_clients_filtered['CustomerAvgBasket'].mean():.2f} £")
-    col3.metric("Commandes moyennes par client", f"{df_clients_filtered['CustomerNumOrders'].mean():.1f}")
+    st.success("Les ventes sont principalement concentrées au Royaume-Uni, mais d'autres pays montrent un potentiel de croissance.")
 
-    st.markdown("#### Top 5 clients les plus dépensiers")
+    # ✅ Recommandations stratégiques
+    st.subheader("📌 Recommandations stratégiques")
+    st.markdown("""
+    Basées sur l'analyse des ventes, des horaires, des clients et des zones géographiques, voici quelques pistes d'actions :
 
-    # Agréger par client pour éviter les duplications de lignes
-    top_clients = df_clients_filtered.groupby('CustomerID', as_index=False).agg({
-    'CustomerTotalSpent': 'first',
-    'CustomerNumOrders': 'first'
-    }).sort_values(by='CustomerTotalSpent', ascending=False).head(5)
+    - 🕒 **Optimiser les campagnes** autour des horaires de forte activité (9h–14h)
+    - 🔁 **Surveiller les retours** produits pour améliorer la qualité ou le ciblage
+    - 🎯 **Fidéliser les meilleurs clients** avec des offres exclusives
+    - 🌍 **Renforcer la présence** dans les pays émergents avec des volumes prometteurs
+    """)
 
-    # Calcul du panier moyen
-    top_clients['CustomerAvgBasket'] = top_clients['CustomerTotalSpent'] / top_clients['CustomerNumOrders']
+    # 🧠 Analyse détaillée
+    st.subheader("🧠 Analyse synthétique")
 
-    # Affichage du tableau
-    st.dataframe(top_clients[['CustomerID', 'CustomerTotalSpent', 'CustomerNumOrders', 'CustomerAvgBasket']])
-    
+    st.markdown("""
+    ### Carte des ventes
+    - L’analyse géographique met en lumière une **concentration majeure des ventes au Royaume-Uni**.
+    - D’autres pays d’Europe de l’Ouest (Pays-Bas, Allemagne, France) affichent une activité intéressante.
+    - Certains marchés secondaires (Australie, pays nordiques) pourraient être développés.
 
-    
-##--------------------------------
-#page visualiasation
-###------------------------------
-elif page == "Visualisations":
-    st.title("📊 Visualisations interactives")
+    ### Recommandations
+    - **Développer des campagnes localisées** dans les zones à fort potentiel
+    - **Étudier les frais de livraison ou barrières logistiques** dans les pays sous-représentés
+    - **Adapter les catalogues produits par région** selon les tendances observées
+    """)
 
-    # ------------------------------
-    # Filtres (sidebar)
-    # ------------------------------
-    st.sidebar.header("🔍 Filtres interactifs")
-
-    # 1. Heure
-    hour_range = st.sidebar.slider("⏰ Plage horaire :", 0, 23, (0, 23))
-
-    # 2. Pays (dropdown pour top produits)
-    countries = sorted(df_all['Country'].dropna().unique())
-    selected_country = st.sidebar.selectbox("🌍 Pays (Top produits)", countries)
-
-    # 3. Multi-pays (checkbox pour carte/pie)
-    selected_countries = st.sidebar.multiselect("🌐 Pays à afficher (ventes par pays)", countries, default=countries)
-
-    # 4. Période (pour évolution CA)
-    date_min = df_all['InvoiceDate'].min().date()
-    date_max = df_all['InvoiceDate'].max().date()
-    date_range = st.sidebar.date_input("📅 Période :", [date_min, date_max], min_value=date_min, max_value=date_max)
-
-    # 5. Slider commandes par client
-    client_order_range = st.sidebar.slider("📦 Nb commandes par client :", 1, 100, (1, 20))
-
-    # ------------------------------
-    # Préparation des données
-    # ------------------------------
-    df_viz = df_all.copy()
-    df_viz['InvoiceHour'] = df_viz['InvoiceDate'].dt.hour
-    df_viz['Date'] = df_viz['InvoiceDate'].dt.date
-
-    if len(date_range) == 2:
-        df_viz = df_viz[(df_viz['InvoiceDate'] >= pd.to_datetime(date_range[0])) &
-                        (df_viz['InvoiceDate'] <= pd.to_datetime(date_range[1]))]
-
-    # ------------------------------
-    # 1️⃣ Ventes par heure (bar chart)
-    # ------------------------------
-    st.subheader("1️⃣ Ventes par heure de la journée")
-    df_hour = df_viz[(df_viz['InvoiceHour'] >= hour_range[0]) & (df_viz['InvoiceHour'] <= hour_range[1])]
-    hour_dist = df_hour.groupby('InvoiceHour').size().reset_index(name='NbCommandes')
-    fig1 = px.bar(hour_dist, x='InvoiceHour', y='NbCommandes', title="Nombre de commandes par heure")
-    st.plotly_chart(fig1, use_container_width=True)
-
-    # ------------------------------
-    # 2️⃣ Top 10 produits les plus vendus (bar chart)
-    # ------------------------------
-    st.subheader("2️⃣ Top 10 des produits les plus vendus par pays")
-    df_country = df_viz[df_viz['Country'] == selected_country]
-    top_products = df_country.groupby('Description')['Quantity'].sum().sort_values(ascending=False).head(10).reset_index()
-    fig2 = px.bar(top_products, x='Quantity', y='Description', orientation='h',
-                  title=f"Top 10 produits – {selected_country}")
-    fig2.update_layout(yaxis={'categoryorder': 'total ascending'})
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # ------------------------------
-    # 3️⃣ Répartition des ventes par pays (pie chart)
-    # ------------------------------
-    st.subheader("3️⃣ Répartition des ventes par pays")
-    df_pays = df_viz[df_viz['Country'].isin(selected_countries)]
-    sales_by_country = df_pays.groupby('Country')['TotalPrice'].sum().reset_index()
-    fig3 = px.pie(sales_by_country, names='Country', values='TotalPrice',
-                  title="Répartition du chiffre d'affaires par pays")
-    st.plotly_chart(fig3, use_container_width=True)
-
-    # ------------------------------
-    # 4️⃣ Évolution du CA dans le temps (line chart)
-    # ------------------------------
-    st.subheader("4️⃣ Évolution du chiffre d'affaires dans le temps")
-    df_daily = df_viz.groupby('Date')['TotalPrice'].sum().reset_index()
-    fig4 = px.line(df_daily, x='Date', y='TotalPrice', title="Chiffre d'affaires quotidien", markers=True)
-    st.plotly_chart(fig4, use_container_width=True)
-
-    # ------------------------------
-    # 5️⃣ Distribution des commandes par client (histogramme)
-    # ------------------------------
-    st.subheader("5️⃣ Distribution du nombre de commandes par client")
-    df_clients_filtered = df_clients.copy()
-    df_clients_filtered = df_clients_filtered[df_clients_filtered['CustomerNumOrders'].between(client_order_range[0], client_order_range[1])]
-    fig5 = px.histogram(df_clients_filtered, x="CustomerNumOrders", nbins=20,
-                        title="Nombre de commandes par client")
-    st.plotly_chart(fig5, use_container_width=True)
-
-    # ------------------------------
-    # Aperçu des données brutes filtrées
-    # ------------------------------
-    st.markdown("### 📦 Aperçu des transactions filtrées")
-    st.dataframe(df_viz[['InvoiceDate', 'InvoiceNo', 'CustomerID', 'Description', 'Quantity', 'TotalPrice']].head(20))
