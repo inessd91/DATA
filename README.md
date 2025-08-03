@@ -36,11 +36,11 @@ Elle permet d'explorer les performances commerciales, le comportement client, le
   - Carte des ventes mondiale
   - Recommandations basées sur les données
 
-## Source des données
+## Source des données:
 Ce projet s’appuie sur le jeu de données Online Retail Dataset publié sur Kaggle: https://www.kaggle.com/datasets/carrie1/ecommerce-data 
 Il contient environ 500 000 lignes de transactions entre décembre 2010 et décembre 2011.
 
-## Recommandations business clés
+## Recommandations business clés:
 Les ventes sont fortement concentrées au Royaume-Uni
 
 Heures de commande optimales : entre 9h et 14h
@@ -51,7 +51,7 @@ Besoin d’actions ciblées sur les clients fidèles
 
 Opportunités à développer dans certains pays émergents
 
-## Fichiers utiles
+## Fichiers utiles:
 app.py – Code principal de l’application
 
 df_all.csv, df_clients.csv, data.csv – Datasets (prétraités ou bruts)
