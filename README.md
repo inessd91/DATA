@@ -3,7 +3,6 @@ Ce projet propose une application interactive construite avec Streamlit permetta
 Elle permet d'explorer les performances commerciales, le comportement client, les produits les plus vendus et les zones géographiques de vente.
 
  ## Fonctionnalités principales :
- 
    - Statistiques globales sur les ventes, articles vendus, clients, pays
    - Analyse temporelle (mensuelle, horaire)
    - Indicateurs de fidélisation client
